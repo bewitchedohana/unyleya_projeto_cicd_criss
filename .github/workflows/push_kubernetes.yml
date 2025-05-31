@@ -1,0 +1,45 @@
+on:
+    workflow_run:
+        workflows: ["Require approval"]
+        types:
+            - completed
+        
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v2
+
+            - name: Login to Azure
+              id: login
+              uses: azure/login@v1.4.3
+              with:
+                creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+            - name: Set AKS context
+              id: set-context
+              uses: azure/aks-set-context@v3
+              with:
+                resource-group: '${{ secrets.RESOURCE_GROUP }}'
+                cluster-name: '${{ secrets.CLUSTER_NAME }}'
+            
+            - name: Prepare kubectl
+              id: install-kubectl
+              uses: azure/setup-kubectl@v3
+
+            - name: Deploy
+              id: deploy-aks
+              uses: Azure/k8s-deploy@v4
+              with:
+                namespace: 'default'
+                manifests: |
+                  azure-vote-all-in-one-redis.yaml
+                images: 'crisscontainerregistry.azurecr.io/crisscontainerregistry/azure-vote-front:v1'
+                pull-images: true
+
+            - name: Create New Relic HELM
+              run: |
+                KSM_IMAGE_VERSION="v2.13.0" && helm repo add newrelic https://helm-charts.newrelic.com && helm repo update && kubectl create namespace newrelic
+                helm upgrade --install newrelic-bundle newrelic/nri-bundle --set global.licenseKey=${{ secrets.NEW_RELIC_KEY }} --set global.cluster=uny_kube --namespace=newrelic --set newrelic-infrastructure.privileged=true --set global.lowDataMode=true --set kube-state-metrics.image.tag=${KSM_IMAGE_VERSION} --set kube-state-metrics.enabled=true --set kubeEvents.enabled=true --set newrelic-prometheus-agent.enabled=true --set newrelic-prometheus-agent.lowDataMode=true --set newrelic-prometheus-agent.config.kubernetes.integrations_filter.enabled=false --set logging.enabled=true --set newrelic-logging.lowDataMode=true

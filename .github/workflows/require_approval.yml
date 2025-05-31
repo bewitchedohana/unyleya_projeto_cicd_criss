@@ -1,0 +1,23 @@
+name: Require approval
+
+on:
+    workflow_run:
+        workflows: ["Build and push"]
+        types:
+            - completed
+
+jobs:
+    approve:
+        runs-on: ubuntu-latest       
+        permissions:
+            issues: write
+
+        steps:
+            - name: Await approval
+              uses: trstringer/manual-approval@v1
+              with:
+                secret: ${{ github.token }}
+                approvers: "bewitchedohana"
+                minimum-approvals: 1
+                issue-title: "Require manual approval for ${{ github.sha }}"
+                issue-body: "Revise the deployment of ${{ github.sha }} to the production environment"
